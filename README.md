@@ -1,3 +1,3 @@
 # Compilers
 
-Solutions to the assignments of compilers course
+Solutions to the assignments of compilers module
