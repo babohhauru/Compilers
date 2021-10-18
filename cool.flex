@@ -39,10 +39,6 @@ extern int verbose_flag;
 
 extern YYSTYPE cool_yylval;
 
-/*
- *  Add Your own definitions here
- */
-
 %}
 
 /*
@@ -51,17 +47,27 @@ extern YYSTYPE cool_yylval;
 
 INTEGER	[0-9]+
 NEWLINE	"\n"
-TypeID	[a-z][a-zA-Z0-9]*
-ObjectID  [a-z][a-zA-Z0-9]*
+OneLineComm --[^\n]*
+TypeID	[a-z][a-z0-9]*
+ObjectID  [a-z][A-Z0-9]*
 WHITESPACE  [\v \f \r \t]
-SINGLECHAR [+-*/)(}{@$\><,.:]
+SINGLECHAR [+-*/@$\><,.:]
 DARROW	=>
-
+TRUE t(?i:rue)
+FALSE f(?i:alse)
 %%
 
  /*
-  *  Nested comments
+  * One-line comment
   */
+{OneLineComm} {}
+
+ /*
+  * Nested comments
+  */
+
+
+
 
 
  /*
@@ -95,19 +101,19 @@ DARROW	=>
     return TYPEID;
 }
 
- /*
-  *  New line
-  */
-{NEWLINE} {
-    curr_lineno++;
-}
-
- /*
+/*
   *  The object identifiers.
   */
 {ObjectID} {
     cool_yylval.symbol = idtable.add_string(yytext);
     return OBJECTID;
+}
+
+ /*
+  *  New line
+  */
+{NEWLINE} {
+    curr_lineno++;
 }
 
  /*
@@ -120,7 +126,39 @@ DARROW	=>
   * Keywords are case-insensitive except for the values true and false,
   * which must begin with a lower-case letter.
   */
+(?i:class) return CLASS;
+(?i:else) return ELSE;
+(?i:fi) return FI;
+(?i:if) return IF;
+(?i:in) return IN;
+(?i:isvoid) return ISVOID;
+(?i:inherits) return INHERITS;
+(?i:let) return LET;
+(?i:loop) return LOOP;
+(?i:pool) return POOL;
+(?i:then) return THEN;
+(?i:while) return WHILE;
+(?i:case) return CASE;
+(?i:esac) return ESAC;
+(?i:new) return NEW;
+(?i:of) return OF;
+(?i:not) return NOT;
 
+ /*
+  *  true condition
+  */
+{TRUE} {
+  cool_yylval.boolean = 1;
+  return BOOL_CONST;
+}
+
+ /*
+  *  false condition
+  */
+{FALSE} {
+  cool_yylval.boolean = 0;
+  return BOOL_CONST;
+}
 
  /*
   *  String constants (C syntax)
@@ -128,6 +166,7 @@ DARROW	=>
   *  \n \t \b \f, the result is c.
   *
   */
+
 
 
 %%
