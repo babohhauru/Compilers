@@ -39,6 +39,11 @@ extern int verbose_flag;
 
 extern YYSTYPE cool_yylval;
 
+/*
+ *  Add Your own definitions here
+ */
+
+std::string str = "";
 %}
 
 /*
@@ -55,17 +60,48 @@ SINGLECHAR [+-*/@$\><,.:]
 DARROW	=>
 TRUE t(?i:rue)
 FALSE f(?i:alse)
+
+%x NCOMMENT
+%x STRING
+
 %%
 
  /*
   * One-line comment
   */
+
 {OneLineComm} {}
 
  /*
   * Nested comments
   */
 
+"(*" {
+	BEGIN (NCOMMENT);
+}
+
+"*)" {
+	cool_yylval.error_msg = "Unmatched *)";
+	return (ERROR);
+}
+
+<NCOMMENT>[^*\n]*	/*eat anything that's not a '*' */
+
+<NCOMMENT>"*"+[^*/\n]*	/* eat up '*'s not followed by '/'s */
+
+<NCOMMENT>\n {
+	++curr_lineno;
+}
+
+<NCOMMENT><<EOF>> {
+	BEGIN (INITIAL);
+	cool_yylval.error_msg = "EOF in comment.";
+	return (ERROR); 
+}
+
+<NCOMMENT>"*"+")" {
+	BEGIN (INITIAL);
+}
 
 
 
@@ -73,6 +109,7 @@ FALSE f(?i:alse)
  /*
   *  The multiple-character operators.
   */
+
 {DARROW} {
 	return (DARROW);
 }
@@ -96,14 +133,16 @@ FALSE f(?i:alse)
  /*
   *  The type identifiers.
   */
+
 {TypeID} {
     cool_yylval.symbol = idtable.add_string(yytext);
     return TYPEID;
 }
 
-/*
+ /*
   *  The object identifiers.
   */
+
 {ObjectID} {
     cool_yylval.symbol = idtable.add_string(yytext);
     return OBJECTID;
@@ -119,6 +158,7 @@ FALSE f(?i:alse)
  /*
   *  White space
   */
+
 {WHITESPACE} {}
 
 
@@ -126,6 +166,7 @@ FALSE f(?i:alse)
   * Keywords are case-insensitive except for the values true and false,
   * which must begin with a lower-case letter.
   */
+
 (?i:class) return CLASS;
 (?i:else) return ELSE;
 (?i:fi) return FI;
@@ -145,16 +186,18 @@ FALSE f(?i:alse)
 (?i:not) return NOT;
 
  /*
-  *  true condition
+  *  True condition
   */
+
 {TRUE} {
   cool_yylval.boolean = 1;
   return BOOL_CONST;
 }
 
  /*
-  *  false condition
+  *  False condition
   */
+
 {FALSE} {
   cool_yylval.boolean = 0;
   return BOOL_CONST;
@@ -167,6 +210,57 @@ FALSE f(?i:alse)
   *
   */
 
+\" {
+	string_buf_ptr = string_buf;
+	str = "";
+	BEGIN(STRING);
+}
 
+<STRING>\" {
+	BEGIN(INITIAL);
+	if (str.size() >= MAX_STR_CONST) {
+		cool_yylval.error_msg = "String constant too long";
+		return(ERROR);
+	}
+}
 
+<STRING>\n {
+	curr_lineno++;
+	str += '\n';
+}
+
+<STRING>\0 {
+	BEGIN(INITIAL);
+	cool_yylval.error_msg = "Null character in string.";
+	return(ERROR);
+}
+
+<STRING><<EOF>> {
+	BEGIN(INITIAL);
+	cool_yylval.error_msg = "EOF in string constant.";
+	return (ERROR); 
+}
+
+<STRING>\\n {
+	BEGIN(INITIAL);
+	++curr_lineno;
+	cool_yylval.error_msg = "‘Unterminated string constant.";
+	return (ERROR);
+}
+<STRING>\\t {
+	str += '\t';
+}
+<STRING>\\r {
+	str += '\r';
+}
+<STRING>\\b {
+	str += '\b';
+}
+<STRING>\\f {
+	str += '\f';
+}
+
+<STRING>\\. {
+	str += yytext[1];
+}
 %%
