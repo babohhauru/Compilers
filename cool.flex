@@ -1,7 +1,7 @@
 /*
  *  The scanner definition for COOL.
  */
-
+%option noyywrap
 /*
  *  Stuff enclosed in %{ %} in the first section is copied verbatim to the
  *  output, so headers and global definitions are placed here to be visible
@@ -39,11 +39,13 @@ extern int verbose_flag;
 
 extern YYSTYPE cool_yylval;
 
+
 /*
  *  Add Your own definitions here
  */
 
 std::string str = "";
+
 %}
 
 /*
@@ -56,7 +58,7 @@ OneLineComm --[^\n]*
 TypeID	[a-z][a-z0-9]*
 ObjectID  [a-z][A-Z0-9]*
 WHITESPACE  [\v \f \r \t]
-SINGLECHAR [+-*/@$\><,.:]
+SINGLECHAR [+*/@$\><,.:-]
 DARROW	=>
 TRUE t(?i:rue)
 FALSE f(?i:alse)
@@ -99,7 +101,7 @@ FALSE f(?i:alse)
 	return (ERROR); 
 }
 
-<NCOMMENT>"*"+")" {
+<NCOMMENT>"*)" {
 	BEGIN (INITIAL);
 }
 
