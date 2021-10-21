@@ -2,6 +2,7 @@
  *  The scanner definition for COOL.
  */
 %option noyywrap
+
 /*
  *  Stuff enclosed in %{ %} in the first section is copied verbatim to the
  *  output, so headers and global definitions are placed here to be visible
@@ -39,12 +40,9 @@ extern int verbose_flag;
 
 extern YYSTYPE cool_yylval;
 
-
 /*
  *  Add Your own definitions here
  */
-
-std::string str = "";
 
 %}
 
@@ -72,7 +70,7 @@ FALSE f(?i:alse)
   * One-line comment
   */
 
-{OneLineComm} {}
+{OneLineComm}.* {}
 
  /*
   * Nested comments
@@ -214,21 +212,16 @@ FALSE f(?i:alse)
 
 \" {
 	string_buf_ptr = string_buf;
-	str = "";
 	BEGIN(STRING);
 }
 
 <STRING>\" {
 	BEGIN(INITIAL);
-	if (str.size() >= MAX_STR_CONST) {
-		cool_yylval.error_msg = "String constant too long";
-		return(ERROR);
-	}
+
 }
 
 <STRING>\n {
 	curr_lineno++;
-	str += '\n';
 }
 
 <STRING>\0 {
@@ -250,19 +243,19 @@ FALSE f(?i:alse)
 	return (ERROR);
 }
 <STRING>\\t {
-	str += '\t';
+	*string_buf_ptr++ = '\t';
 }
 <STRING>\\r {
-	str += '\r';
+	*string_buf_ptr++ = '\r';
 }
 <STRING>\\b {
-	str += '\b';
+	*string_buf_ptr++ = '\b';
 }
 <STRING>\\f {
-	str += '\f';
+	*string_buf_ptr++ = '\f';
 }
 
 <STRING>\\. {
-	str += yytext[1];
+	
 }
 %%
