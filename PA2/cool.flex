@@ -44,6 +44,10 @@ extern YYSTYPE cool_yylval;
  *  Add Your own definitions here
  */
 
+static std::string currentStr; /* For determining if a string is too long */
+
+int commentLayer; /* For counting layers of nested comment */
+
 %}
 
 /*
@@ -53,11 +57,12 @@ extern YYSTYPE cool_yylval;
 INTEGER	[0-9]+
 NEWLINE	"\n"
 OneLineComm --[^\n]*
-TypeID	[a-z][a-z0-9]*
-ObjectID  [a-z][A-Z0-9]*
+TYPEID	[a-z][a-z0-9]*
+OBJECTID  [a-z][A-Z0-9]*
 WHITESPACE  [\v \f \r \t]
 SINGLECHAR [+*/@$\><,.:-]
 DARROW	=>
+ASSIGN <-
 TRUE t(?i:rue)
 FALSE f(?i:alse)
 
@@ -70,7 +75,7 @@ FALSE f(?i:alse)
   * One-line comment
   */
 
-{OneLineComm}.* {}
+{OneLineComm}.* ;
 
  /*
   * Nested comments
@@ -85,9 +90,16 @@ FALSE f(?i:alse)
 	return (ERROR);
 }
 
-<NCOMMENT>[^*\n]*	/*eat anything that's not a '*' */
+<NCOMMENT>"(*" {
+  commentLayer++;
+}
 
-<NCOMMENT>"*"+[^*/\n]*	/* eat up '*'s not followed by '/'s */
+<NCOMMENT>"*)" {
+  if(commentLayer == 1) {
+    BEGIN(INITIAL);
+  }
+  commentLayer--;
+}
 
 <NCOMMENT>\n {
 	++curr_lineno;
@@ -99,12 +111,7 @@ FALSE f(?i:alse)
 	return (ERROR); 
 }
 
-<NCOMMENT>"*)" {
-	BEGIN (INITIAL);
-}
-
-
-
+<NCOMMENT>. ;
 
  /*
   *  The multiple-character operators.
@@ -114,9 +121,14 @@ FALSE f(?i:alse)
 	return (DARROW);
 }
 
+{ASSIGN} {
+  return (ASSIGN);
+}
+
  /*
   *  The single-character operators.
   */
+ 
 {SINGLECHAR} {
 	return (yytext[0]);
 }
@@ -134,7 +146,7 @@ FALSE f(?i:alse)
   *  The type identifiers.
   */
 
-{TypeID} {
+{TYPEID} {
     cool_yylval.symbol = idtable.add_string(yytext);
     return TYPEID;
 }
@@ -143,7 +155,7 @@ FALSE f(?i:alse)
   *  The object identifiers.
   */
 
-{ObjectID} {
+{OBJECTID} {
     cool_yylval.symbol = idtable.add_string(yytext);
     return OBJECTID;
 }
@@ -151,6 +163,7 @@ FALSE f(?i:alse)
  /*
   *  New line
   */
+
 {NEWLINE} {
     curr_lineno++;
 }
@@ -159,7 +172,7 @@ FALSE f(?i:alse)
   *  White space
   */
 
-{WHITESPACE} {}
+{WHITESPACE} ;
 
 
  /*
@@ -211,17 +224,22 @@ FALSE f(?i:alse)
   */
 
 \" {
-	string_buf_ptr = string_buf;
+  currentStr = "";
 	BEGIN(STRING);
 }
 
 <STRING>\" {
 	BEGIN(INITIAL);
-
+  if(currentStr.size() >= MAX_STR_CONST) {
+    cool_yylval.error.msg = "String constant too long";
+    return (ERROR);
+  }
 }
 
 <STRING>\n {
-	curr_lineno++;
+	++curr_lineno;
+  cool_yylval.error_msg = "Unterminated string constant.";
+	return (ERROR);
 }
 
 <STRING>\0 {
@@ -237,25 +255,36 @@ FALSE f(?i:alse)
 }
 
 <STRING>\\n {
-	BEGIN(INITIAL);
-	++curr_lineno;
-	cool_yylval.error_msg = "‘Unterminated string constant.";
-	return (ERROR);
-}
-<STRING>\\t {
-	*string_buf_ptr++ = '\t';
-}
-<STRING>\\r {
-	*string_buf_ptr++ = '\r';
-}
-<STRING>\\b {
-	*string_buf_ptr++ = '\b';
-}
-<STRING>\\f {
-	*string_buf_ptr++ = '\f';
+  currentStr++ = '\n';
 }
 
-<STRING>\\. {
-	
+<STRING>\\t {
+	currentStr++ = '\t';
 }
+
+<STRING>\\r {
+	currentStr++ = '\r';
+}
+
+<STRING>\\b {
+	currentStr++ = '\b';
+}
+
+<STRING>\\f {
+	currentStr++ = '\f';
+}
+
+<STRING>\\(.|\n) {
+  currentStr++ = yytext[1];
+}
+
+<STRING>. {
+  currentStr++ = yytext;  
+}
+
+. {
+  cool_yylval.error_msg = yytext;
+  return (ERROR);
+}
+
 %%
