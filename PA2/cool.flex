@@ -44,8 +44,6 @@ extern YYSTYPE cool_yylval;
  *  Add Your own definitions here
  */
 
-static std::string currentStr; /* For determining if a string is too long */
-
 int commentLayer; /* For counting layers of nested comment */
 
 %}
@@ -57,10 +55,10 @@ int commentLayer; /* For counting layers of nested comment */
 INTEGER	[0-9]+
 NEWLINE	"\n"
 OneLineComm --[^\n]*
-TYPEID	[a-z][a-z0-9]*
-OBJECTID  [a-z][A-Z0-9]*
+TYPEID	[A-Z][a-zA-Z_]*
+OBJECTID  [a-z][a-z_]*
 WHITESPACE  [\v \f \r \t]
-SINGLECHAR [+*/@$\><,.:-]
+SINGLECHAR [+*/@$\<}{)(,.:;=-]
 DARROW	=>
 ASSIGN <-
 TRUE t(?i:rue)
@@ -70,6 +68,196 @@ FALSE f(?i:alse)
 %x STRING
 
 %%
+
+ /*
+  * Keywords are case-insensitive except for the values true and false,
+  * which must begin with a lower-case letter.
+  */
+
+(?i:class) {
+	return CLASS;
+}
+(?i:else) {
+	return ELSE;
+}
+(?i:fi) {
+	return FI;
+}
+(?i:if) {
+	return IF;
+}
+(?i:in) {
+	return IN;
+}
+(?i:isvoid) {
+	return ISVOID;
+}
+(?i:inherits) {
+	return INHERITS;
+}
+(?i:let) {
+	return LET;
+}
+(?i:loop) {
+	return LOOP;
+}
+(?i:pool) {
+	return POOL;
+}
+(?i:then) {
+	return THEN;
+}
+(?i:while) {
+	return WHILE;
+}
+(?i:case) {
+	return CASE;
+}
+(?i:esac) {
+	return ESAC;
+}
+(?i:new) {
+	return NEW;
+}
+(?i:of) {
+	return OF;
+}
+(?i:not) {
+	return NOT;
+}
+
+ /*
+  *  The integers.
+  */
+
+{INTEGER} {
+   	cool_yylval.symbol = inttable.add_string(yytext);
+    	return (INT_CONST);
+}
+
+ /*
+  *  The type identifiers.
+  */
+
+{TYPEID} {
+    	cool_yylval.symbol = idtable.add_string(yytext);
+    	return (TYPEID);
+}
+
+ /*
+  *  The object identifiers.
+  */
+
+{OBJECTID} {
+	cool_yylval.symbol = idtable.add_string(yytext);
+	return (OBJECTID);
+}
+
+ /*
+  *  The multiple-character operators.
+  */
+
+{DARROW} {
+	return (DARROW);
+}
+
+{ASSIGN} {
+  	return (ASSIGN);
+}
+
+ /*
+  *  The single-character operators.
+  */
+ 
+{SINGLECHAR} {
+	return (yytext[0]);
+}
+
+ /*
+  *  New line
+  */
+
+{NEWLINE} {
+	curr_lineno++;
+}
+
+ /*
+  *  String constants (C syntax)
+  *  Escape sequence \c is accepted for all characters c. Except for 
+  *  \n \t \b \f, the result is c.
+  *
+  */
+
+\" {
+	string_buf_ptr = string_buf;
+	BEGIN(STRING);
+}
+
+<STRING>\" {
+	BEGIN(INITIAL);
+	*string_buf_ptr = '\0';
+  	if(string_buf_ptr >= &string_buf[MAX_STR_CONST - 1]) {
+		cool_yylval.error_msg = "String constant too long.";
+		return(ERROR);
+	}
+	cool_yylval.symbol = stringtable.add_string(string_buf);
+    	return (STR_CONST);
+}
+
+<STRING>\n {
+	BEGIN(INITIAL);
+  	cool_yylval.error_msg = "Unterminated string constant.";
+	return (ERROR);
+}
+
+<STRING>\0 {
+	BEGIN(INITIAL);
+	cool_yylval.error_msg = "Null character in string.";
+	return (ERROR);
+}
+
+<STRING>\\n {
+  	*string_buf_ptr++ = '\n';
+}
+
+<STRING>\\t {
+	*string_buf_ptr++ = '\t';
+}
+
+<STRING>\\r {
+	*string_buf_ptr++ = '\r';
+}
+
+<STRING>\\b {
+	*string_buf_ptr++ = '\b';
+}
+
+<STRING>\\f {
+	*string_buf_ptr++ = '\f';
+}
+
+<STRING>\\\0 {
+	BEGIN(INITIAL);
+	cool_yylval.error_msg = "Null character in string.";
+	return (ERROR);
+}
+
+<STRING>\\(.|\n) {
+  	*string_buf_ptr++ = yytext[1];
+}
+
+<STRING><<EOF>> {
+	BEGIN(INITIAL);
+	cool_yylval.error_msg = "EOF in string constant.";
+	return (ERROR); 
+}
+
+<STRING>[^\\\n\"]+ {
+	char *yptr = yytext;
+	while (*yptr) {
+		 *string_buf_ptr++ = *yptr++;
+	}
+}
 
  /*
   * One-line comment
@@ -82,6 +270,7 @@ FALSE f(?i:alse)
   */
 
 "(*" {
+	commentLayer = 1;
 	BEGIN (NCOMMENT);
 }
 
@@ -91,19 +280,21 @@ FALSE f(?i:alse)
 }
 
 <NCOMMENT>"(*" {
-  commentLayer++;
+  	commentLayer++;
 }
 
 <NCOMMENT>"*)" {
-  if(commentLayer == 1) {
-    BEGIN(INITIAL);
-  }
-  commentLayer--;
+  	if(commentLayer == 1) {
+    		BEGIN(INITIAL);
+  	}
+  	commentLayer--;
 }
 
 <NCOMMENT>\n {
-	++curr_lineno;
+	curr_lineno++;
 }
+
+<NCOMMENT>[^*\n]*	;
 
 <NCOMMENT><<EOF>> {
 	BEGIN (INITIAL);
@@ -111,100 +302,14 @@ FALSE f(?i:alse)
 	return (ERROR); 
 }
 
-<NCOMMENT>. ;
-
- /*
-  *  The multiple-character operators.
-  */
-
-{DARROW} {
-	return (DARROW);
-}
-
-{ASSIGN} {
-  return (ASSIGN);
-}
-
- /*
-  *  The single-character operators.
-  */
- 
-{SINGLECHAR} {
-	return (yytext[0]);
-}
-
- /*
-  *  The integers.
-  */
-
-{INTEGER} {
-    cool_yylval.symbol = inttable.add_string(yytext);
-    return INT_CONST;
-} 
-
- /*
-  *  The type identifiers.
-  */
-
-{TYPEID} {
-    cool_yylval.symbol = idtable.add_string(yytext);
-    return TYPEID;
-}
-
- /*
-  *  The object identifiers.
-  */
-
-{OBJECTID} {
-    cool_yylval.symbol = idtable.add_string(yytext);
-    return OBJECTID;
-}
-
- /*
-  *  New line
-  */
-
-{NEWLINE} {
-    curr_lineno++;
-}
-
- /*
-  *  White space
-  */
-
-{WHITESPACE} ;
-
-
- /*
-  * Keywords are case-insensitive except for the values true and false,
-  * which must begin with a lower-case letter.
-  */
-
-(?i:class) return CLASS;
-(?i:else) return ELSE;
-(?i:fi) return FI;
-(?i:if) return IF;
-(?i:in) return IN;
-(?i:isvoid) return ISVOID;
-(?i:inherits) return INHERITS;
-(?i:let) return LET;
-(?i:loop) return LOOP;
-(?i:pool) return POOL;
-(?i:then) return THEN;
-(?i:while) return WHILE;
-(?i:case) return CASE;
-(?i:esac) return ESAC;
-(?i:new) return NEW;
-(?i:of) return OF;
-(?i:not) return NOT;
 
  /*
   *  True condition
   */
 
 {TRUE} {
-  cool_yylval.boolean = 1;
-  return BOOL_CONST;
+	cool_yylval.boolean = 1;
+	return (BOOL_CONST);
 }
 
  /*
@@ -212,79 +317,19 @@ FALSE f(?i:alse)
   */
 
 {FALSE} {
-  cool_yylval.boolean = 0;
-  return BOOL_CONST;
+	cool_yylval.boolean = 0;
+	return (BOOL_CONST);
 }
 
  /*
-  *  String constants (C syntax)
-  *  Escape sequence \c is accepted for all characters c. Except for 
-  *  \n \t \b \f, the result is c.
-  *
+  *  White space
   */
 
-\" {
-  currentStr = "";
-	BEGIN(STRING);
-}
-
-<STRING>\" {
-	BEGIN(INITIAL);
-  if(currentStr.size() >= MAX_STR_CONST) {
-    cool_yylval.error.msg = "String constant too long";
-    return (ERROR);
-  }
-}
-
-<STRING>\n {
-	++curr_lineno;
-  cool_yylval.error_msg = "Unterminated string constant.";
-	return (ERROR);
-}
-
-<STRING>\0 {
-	BEGIN(INITIAL);
-	cool_yylval.error_msg = "Null character in string.";
-	return(ERROR);
-}
-
-<STRING><<EOF>> {
-	BEGIN(INITIAL);
-	cool_yylval.error_msg = "EOF in string constant.";
-	return (ERROR); 
-}
-
-<STRING>\\n {
-  currentStr++ = '\n';
-}
-
-<STRING>\\t {
-	currentStr++ = '\t';
-}
-
-<STRING>\\r {
-	currentStr++ = '\r';
-}
-
-<STRING>\\b {
-	currentStr++ = '\b';
-}
-
-<STRING>\\f {
-	currentStr++ = '\f';
-}
-
-<STRING>\\(.|\n) {
-  currentStr++ = yytext[1];
-}
-
-<STRING>. {
-  currentStr++ = yytext;  
-}
-
+{WHITESPACE} ;
+ 
 . {
-  cool_yylval.error_msg = yytext;
-  return (ERROR);
+	cool_yylval.error_msg = yytext;
+	return (ERROR);
 }
 
 %%
