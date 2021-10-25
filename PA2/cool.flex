@@ -57,8 +57,8 @@ NEWLINE	"\n"
 OneLineComm --[^\n]*
 TYPEID	[A-Z][a-zA-Z_]*
 OBJECTID  [a-z][a-z_]*
-WHITESPACE  [\v \f \r \t]
-SINGLECHAR [+*/@$\<}{)(,.:;=-]
+WHITESPACE  [\f \r \t \v]
+SINGLECHAR [+*/@\<}{)(,.:;=-]
 DARROW	=>
 ASSIGN <-
 TRUE t(?i:rue)
@@ -74,57 +74,23 @@ FALSE f(?i:alse)
   * which must begin with a lower-case letter.
   */
 
-(?i:class) {
-	return CLASS;
-}
-(?i:else) {
-	return ELSE;
-}
-(?i:fi) {
-	return FI;
-}
-(?i:if) {
-	return IF;
-}
-(?i:in) {
-	return IN;
-}
-(?i:isvoid) {
-	return ISVOID;
-}
-(?i:inherits) {
-	return INHERITS;
-}
-(?i:let) {
-	return LET;
-}
-(?i:loop) {
-	return LOOP;
-}
-(?i:pool) {
-	return POOL;
-}
-(?i:then) {
-	return THEN;
-}
-(?i:while) {
-	return WHILE;
-}
-(?i:case) {
-	return CASE;
-}
-(?i:esac) {
-	return ESAC;
-}
-(?i:new) {
-	return NEW;
-}
-(?i:of) {
-	return OF;
-}
-(?i:not) {
-	return NOT;
-}
+(?i:class) {return CLASS;}
+(?i:else) {return ELSE;}
+(?i:fi) {return FI;}
+(?i:if) {return IF;}
+(?i:in) {return IN;}
+(?i:isvoid) {return ISVOID;}
+(?i:inherits) {return INHERITS;}
+(?i:let) {return LET;}
+(?i:loop) {return LOOP;}
+(?i:pool) {return POOL;}
+(?i:then) {return THEN;}
+(?i:while) {return WHILE;}
+(?i:case) {return CASE;}
+(?i:esac) {return ESAC;}
+(?i:new) {return NEW;}
+(?i:of) {return OF;}
+(?i:not) {return NOT;}
 
  /*
   *  The integers.
