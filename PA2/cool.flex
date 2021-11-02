@@ -53,14 +53,17 @@ int commentLayer; /* For counting layers of nested comment */
  */
 
 INTEGER	[0-9]+
-NEWLINE	"\n"
-OneLineComm --[^\n]*
 TYPEID	[A-Z][a-zA-Z_]*
 OBJECTID  [a-z][a-z_]*
+
+OneLineComm --[^\n]*
+
 WHITESPACE  [\f \r \t \v]
 SINGLECHAR [+*/@\<}{)(,.:;=-]
 DARROW	=>
 ASSIGN <-
+NEWLINE	"\n"
+
 TRUE t(?i:rue)
 FALSE f(?i:alse)
 
@@ -155,8 +158,8 @@ FALSE f(?i:alse)
   */
 
 \" {
-	string_buf_ptr = string_buf;
 	BEGIN(STRING);
+	string_buf_ptr = string_buf;
 }
 
 <STRING>\" {
@@ -171,14 +174,26 @@ FALSE f(?i:alse)
 }
 
 <STRING>\n {
+  	curr_lineno++;
 	BEGIN(INITIAL);
-  	cool_yylval.error_msg = "Unterminated string constant.";
+	cool_yylval.error_msg = "Unterminated string constant.";
 	return (ERROR);
 }
 
-<STRING>\0 {
+<STRING>\\\n {
+	curr_lineno++;
+	*string_buf_ptr++ = yytext[1];
+}
+	
+<STRING><<EOF>> {
+	cool_yylval.error_msg = "EOF in string constant.";
 	BEGIN(INITIAL);
+	return (ERROR); 
+}
+
+<STRING>\0 {
 	cool_yylval.error_msg = "Null character in string.";
+	BEGIN(INITIAL);
 	return (ERROR);
 }
 
@@ -202,20 +217,8 @@ FALSE f(?i:alse)
 	*string_buf_ptr++ = '\f';
 }
 
-<STRING>\\\0 {
-	BEGIN(INITIAL);
-	cool_yylval.error_msg = "Null character in string.";
-	return (ERROR);
-}
-
-<STRING>\\(.|\n) {
+<STRING>\\. {
   	*string_buf_ptr++ = yytext[1];
-}
-
-<STRING><<EOF>> {
-	BEGIN(INITIAL);
-	cool_yylval.error_msg = "EOF in string constant.";
-	return (ERROR); 
 }
 
 <STRING>[^\\\n\"]+ {
@@ -229,7 +232,7 @@ FALSE f(?i:alse)
   * One-line comment
   */
 
-{OneLineComm}.* ;
+{OneLineComm}* ;
 
  /*
   * Nested comments
@@ -267,7 +270,6 @@ FALSE f(?i:alse)
 	cool_yylval.error_msg = "EOF in comment.";
 	return (ERROR); 
 }
-
 
  /*
   *  True condition
