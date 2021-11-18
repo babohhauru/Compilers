@@ -6,12 +6,15 @@
     /* You will want to change the following line. */
     %type <feature> feature
     %type <features> feature_list
+
     %type <formal> formal
     %type <formals> formal_list
+
     %type <expressions> expr_list
-    %type <expressions> expr_list_
+    %type <expressions> expr_list_param
     %type <expression> expr
-    %type <expression> let_
+    %type <expression> let_expr
+
     %type <cases> case_list
     %type <case_> case
     
