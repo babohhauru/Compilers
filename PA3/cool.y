@@ -4,10 +4,10 @@
     %type <class_> class
     
     /* You will want to change the following line. */
-    %type <features> feature_list
     %type <feature> feature
-    %type <formals> formal_list
+    %type <features> feature_list
     %type <formal> formal
+    %type <formals> formal_list
     %type <expressions> expr_list
     %type <expressions> expr_list_
     %type <expression> expr
