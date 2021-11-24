@@ -186,61 +186,67 @@
 
     expression 
     : OBJECTID ASSIGN expression
-    {$$ = assign($1, $3);}
+    { $$ = assign($1, $3);}
+    /* static dispatch */
+    | expression '@' TYPEID '.' OBJECTID '(' expr_list ')'
+    { $$ = static_dispatch($1, $3, $5, $7);}
+    /* dispatch (commonly used form) */
+    | expression '.' OBJECTID '(' expr_list ')'
+    { $$ = dispatch($1, $3, $5);}
     /* if-else */
-    |IF expression THEN expression ELSE expression FI
-    {$$ = cond($2, $4, $6);}
+    | IF expression THEN expression ELSE expression FI
+    { $$ = cond($2, $4, $6);}
     /* while-loop */
-    |WHILE expression LOOP expression POOL
-    {$$ = loop($2, $4);}
+    | WHILE expression LOOP expression POOL
+    { $$ = loop($2, $4);}
     /* new */
-    |NEW TYPEID
-    {$$ = new_($2);}
+    | NEW TYPEID
+    { $$ = new_($2);}
     /* is void*/
-    |ISVOID expr
-    {$$ = isvoid($2);}
+    | ISVOID expr
+    { $$ = isvoid($2);}
     /* plus */
-    |expression '+' expression
-    {$$ = plus($1, $3);}
+    | expression '+' expression
+    { $$ = plus($1, $3);}
     /* sub */
-    |expression '-' expression
-    {$$ = sub($1, $3); }
+    | expression '-' expression
+    { $$ = sub($1, $3); }
     /* mul */
-    |expression '*' expression
-    {$$ = mul($1, $3); }
+    | expression '*' expression
+    { $$ = mul($1, $3); }
     /* div */
-    |expression '/' expression
-    {$$ = divide($1, $3); }
+    | expression '/' expression
+    { $$ = divide($1, $3); }
     /* neg */
-    |'~' expression
-    {$$ = neg($2); }
+    | '~' expression
+    { $$ = neg($2); }
     /* less than */
-    |expression '<' expression
-    {$$ = lt($1, $3); }
+    | expression '<' expression
+    { $$ = lt($1, $3); }
     /* less than or equal */
-    |expression LE expression
-    {$$ = leq($1, $3); } 
+    | expression LE expression
+    { $$ = leq($1, $3); } 
     /* equal */
-    |expression '=' expression
-    {$$ = eq($1, $3); }
+    | expression '=' expression
+    { $$ = eq($1, $3); }
     /* not */
-    |NOT expression
-    {$$ = comp($2);}
+    | NOT expression
+    { $$ = comp($2);}
     /* () */
-    |'(' expr ')'
-    {$$ = $2;}
+    | '(' expr ')'
+    { $$ = $2;}
     /* objectid */
-    |OBJECTID
-    {$$ = object($1);}
+    | OBJECTID
+    { $$ = object($1);}
     /* typeid */
     | INT_CONST
-    {$$ = int_const($1);}
+    { $$ = int_const($1);}
     /* string */
-    |STR_CONST
-    {$$ = string_const($1);}
+    | STR_CONST
+    { $$ = string_const($1);}
     /* boolean */
-    |BOOL_CONST
-    {$$ = bool_const($1);};
+    | BOOL_CONST
+    { $$ = bool_const($1);};
     
     /* end of grammar */
     %%
