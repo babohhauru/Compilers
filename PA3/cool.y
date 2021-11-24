@@ -137,12 +137,12 @@
     /* You will want to change the following line. */
     %type <features> dummy_feature_list
     %type <feature> feature
-    %type <formal> formal
     %type <formals> formal_list
-    %type <case_> case_
-    %type <cases> case_list
-    %type <expression> expression
+    %type <formal> formal
     %type <expressions> expre_list
+    %type <expression> expression
+    %type <cases> case_list
+    %type <case_> case
     
     /* Precedence declarations go here. */
     %right ASSIGN
@@ -183,27 +183,44 @@
     dummy_feature_list:		/* empty */
     {  $$ = nil_Features(); }
 
+    formal
+    : OBJECTID ':' TYPEID
+    { $$ = formal($1, $3); }
+    ;
 
     expression 
     : OBJECTID ASSIGN expression
     { $$ = assign($1, $3);}
-    /* static dispatch */
+    /* static type dispatch */
+    | expression '@' TYPEID '.' OBJECTID '(' ')'
+    { $$ = static_dispatch($1, $3, $5, nil_Expressions());}
     | expression '@' TYPEID '.' OBJECTID '(' expr_list ')'
     { $$ = static_dispatch($1, $3, $5, $7);}
-    /* dispatch (commonly used form) */
-    | expression '.' OBJECTID '(' expr_list ')'
+    /* self type dispatch (commonly used form) */
+    | expression '.' OBJECTID '(' ')'
     { $$ = dispatch($1, $3, $5);}
+    | expression '.' OBJECTID '(' expr_list ')'
+    { $$ = dispatch($1, $3, nil_Expressions());}
     /* if-else */
     | IF expression THEN expression ELSE expression FI
     { $$ = cond($2, $4, $6);}
     /* while-loop */
     | WHILE expression LOOP expression POOL
     { $$ = loop($2, $4);}
+    /* block */
+    | '{' expre_list '}'
+    { $$ = block($2); }
+    /* let */
+    |OBJECTID ':' TYPEID IN expression
+    {$$ = let($1, $3, no_expr(), $5);}
+    /* case */
+    | CASE expression OF case_list ESAC
+    { $$ = typcase($2, $4); }
     /* new */
     | NEW TYPEID
     { $$ = new_($2);}
     /* is void*/
-    | ISVOID expr
+    | ISVOID expression
     { $$ = isvoid($2);}
     /* plus */
     | expression '+' expression
