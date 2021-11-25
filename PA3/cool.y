@@ -139,7 +139,7 @@
     %type <feature> feature
     %type <formals> formal_list
     %type <formal> formal
-    %type <expressions> expre_list
+    %type <expressions> expre_list let_expre
     %type <expression> expression
     %type <cases> case_list
     %type <case_> case
@@ -182,11 +182,49 @@
     /* Feature list may be empty, but no empty features in list. */
     dummy_feature_list:		/* empty */
     {  $$ = nil_Features(); }
+    |
 
+    feature
+    : OBJECTID '(' ')' ':' TYPEID '{' expression '}'
+    { $$ = method($1, no_expr(), $5, $7);}
+    | OBJECTID '(' formal_list ')' ':' TYPEID '{' expression '}'
+    { $$ = method($1, $3, $5, $7);}
+    | OBJECTID ':' TYPEID
+    { $$ = attr($1, $3, no_expr());}
+    | OBJECTID ':' TYPEID ASSIGN expression
+    { $$ = attr($1, $3, $5);}
+    
     formal
     : OBJECTID ':' TYPEID
-    { $$ = formal($1, $3); }
-    ;
+    { $$ = formal($1, $3);}
+
+    formal_list
+    : formal /* single formal */
+    {$$ = single_Formals($1);}
+    | formal_list formal /* multi formals */
+    {$$ = append_Formals($1, single_Formals($3));}
+
+    let_expre
+    : OBJECTID ':' TYPEID IN expression
+    | { $$ = let($1, $3, no_expr(), $5);}
+    : OBJECTID ':' TYPEID ASSIGN expression IN expression
+    | { $$ = let($1, $3, $4, $5);}
+
+    case
+    : OBJECTID ':' TYPEID DARROW expression ';'
+    | { $$ = branch($1, $3, $5);}
+
+    case_list
+    : case  /* single case */
+    | { $$ = single_Cases($1);}
+    : case_list case /* multi cases */
+    | { $$ = append_Cases($1, single_Cases($2));}
+
+    expre_list
+    : expression /* single expression */
+    | { $$ = single_Expressions($1);}
+    : expre_list expression /* multi expressions */
+    | { $$ = append_Expressions($1, single_Expressions($2));}
 
     expression 
     : OBJECTID ASSIGN expression
@@ -196,11 +234,16 @@
     { $$ = static_dispatch($1, $3, $5, nil_Expressions());}
     | expression '@' TYPEID '.' OBJECTID '(' expr_list ')'
     { $$ = static_dispatch($1, $3, $5, $7);}
-    /* self type dispatch (commonly used form) */
+    /* dispatch (commonly used form) */
     | expression '.' OBJECTID '(' ')'
-    { $$ = dispatch($1, $3, $5);}
-    | expression '.' OBJECTID '(' expr_list ')'
     { $$ = dispatch($1, $3, nil_Expressions());}
+    | expression '.' OBJECTID '(' expr_list ')'
+    { $$ = dispatch($1, $3, $5);}
+    /* self type dispatch */
+    | OBJECTID '(' ')'
+    { $$ = dispatch(idtable.add_string("self"), $1, nil_Expressions());}
+    | OBJECTID '(' expre_list ')'
+    { $$ = dispatch(idtable.add_string("self"), $1, $3)}
     /* if-else */
     | IF expression THEN expression ELSE expression FI
     { $$ = cond($2, $4, $6);}
@@ -208,14 +251,16 @@
     | WHILE expression LOOP expression POOL
     { $$ = loop($2, $4);}
     /* block */
-    | '{' expre_list '}'
-    { $$ = block($2); }
+    | '{' '}'
+    { $$ = block(nil_Expressions());}
+    | '{' expr_list '}'
+    { $$ = block($2);}
     /* let */
-    |OBJECTID ':' TYPEID IN expression
-    {$$ = let($1, $3, no_expr(), $5);}
+    | LET let_expre
+    { $$ = $2;}
     /* case */
     | CASE expression OF case_list ESAC
-    { $$ = typcase($2, $4); }
+    { $$ = typcase($2, $4);}
     /* new */
     | NEW TYPEID
     { $$ = new_($2);}
@@ -227,25 +272,25 @@
     { $$ = plus($1, $3);}
     /* sub */
     | expression '-' expression
-    { $$ = sub($1, $3); }
+    { $$ = sub($1, $3);}
     /* mul */
     | expression '*' expression
-    { $$ = mul($1, $3); }
+    { $$ = mul($1, $3);}
     /* div */
     | expression '/' expression
-    { $$ = divide($1, $3); }
+    { $$ = divide($1, $3);}
     /* neg */
     | '~' expression
-    { $$ = neg($2); }
+    { $$ = neg($2);}
     /* less than */
     | expression '<' expression
-    { $$ = lt($1, $3); }
+    { $$ = lt($1, $3);}
     /* less than or equal */
     | expression LE expression
-    { $$ = leq($1, $3); } 
+    { $$ = leq($1, $3);} 
     /* equal */
     | expression '=' expression
-    { $$ = eq($1, $3); }
+    { $$ = eq($1, $3);}
     /* not */
     | NOT expression
     { $$ = comp($2);}
