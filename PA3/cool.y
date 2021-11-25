@@ -172,9 +172,9 @@
     ;
     
     /* If no parent is specified, the class inherits from the Object class. */
-    class	: CLASS TYPEID '{' dummy_feature_list '}' ';'
-    { $$ = class_($2,idtable.add_string("Object"),$4,
-    	stringtable.add_string(curr_filename)); }
+    class	
+    : CLASS TYPEID '{' dummy_feature_list '}' ';'
+    { $$ = class_($2,idtable.add_string("Object"), $4, stringtable.add_string(curr_filename)); }
     | CLASS TYPEID INHERITS TYPEID '{' dummy_feature_list '}' ';'
     { $$ = class_($2,$4,$6,stringtable.add_string(curr_filename)); }
     ;
