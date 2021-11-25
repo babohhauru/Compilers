@@ -183,6 +183,7 @@
     dummy_feature_list:		/* empty */
     {  $$ = nil_Features(); }
     |
+    ;
 
     feature
     : OBJECTID '(' ')' ':' TYPEID '{' expression '}'
@@ -193,38 +194,45 @@
     { $$ = attr($1, $3, no_expr());}
     | OBJECTID ':' TYPEID ASSIGN expression
     { $$ = attr($1, $3, $5);}
+    ;
     
     formal
     : OBJECTID ':' TYPEID
     { $$ = formal($1, $3);}
+    ;
 
     formal_list
     : formal /* single formal */
     {$$ = single_Formals($1);}
     | formal_list formal /* multi formals */
     {$$ = append_Formals($1, single_Formals($3));}
+    ;
 
     let_expre
     : OBJECTID ':' TYPEID IN expression
     | { $$ = let($1, $3, no_expr(), $5);}
     : OBJECTID ':' TYPEID ASSIGN expression IN expression
     | { $$ = let($1, $3, $4, $5);}
+    ;
 
     case
     : OBJECTID ':' TYPEID DARROW expression ';'
     | { $$ = branch($1, $3, $5);}
+    ;
 
     case_list
     : case  /* single case */
     | { $$ = single_Cases($1);}
     : case_list case /* multi cases */
     | { $$ = append_Cases($1, single_Cases($2));}
+    ;
 
     expre_list
     : expression /* single expression */
     | { $$ = single_Expressions($1);}
     : expre_list expression /* multi expressions */
     | { $$ = append_Expressions($1, single_Expressions($2));}
+    ;
 
     expression 
     : OBJECTID ASSIGN expression
@@ -308,7 +316,8 @@
     { $$ = string_const($1);}
     /* boolean */
     | BOOL_CONST
-    { $$ = bool_const($1);};
+    { $$ = bool_const($1);}
+    ;
     
     /* end of grammar */
     %%
