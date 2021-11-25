@@ -181,8 +181,9 @@
     
     /* Feature list may be empty, but no empty features in list. */
     dummy_feature_list:		/* empty */
-    {  $$ = nil_Features(); }
-    |
+    { $$ = nil_Features();}
+    | feature ';'
+    { $$ = $1;}
     ;
 
     feature
