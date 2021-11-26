@@ -139,7 +139,7 @@
     %type <feature> feature
     %type <formals> formal_list
     %type <formal> formal
-    %type <expressions> expre_list
+    %type <expressions> block_expre dispatch_expre
     %type <expression> expre let_expre
     %type <cases> case_list
     %type <case_> case
@@ -159,16 +159,16 @@
     /* 
     Save the root of the abstract syntax tree in a global variable.
     */
-    program	: class_list	{ @$ = @1; ast_root = program($1); }
+    program	
+    : class_list	
+    { @$ = @1; ast_root = program($1); }
     ;
     
     class_list
     : class			/* single class */
-    { $$ = single_Classes($1);
-    	parse_results = $$; }
+    { $$ = single_Classes($1);parse_results = $$; }
     | class_list class	/* several classes */
-    { $$ = append_Classes($1,single_Classes($2)); 
-    	parse_results = $$; }
+    { $$ = append_Classes($1,single_Classes($2)); parse_results = $$; }
     ;
     
     /* If no parent is specified, the class inherits from the Object class. */
@@ -183,76 +183,40 @@
     dummy_feature_list
     :	/* empty */
     { $$ = nil_Features();}
+    | feature
+    { $$ = single_Features($1);}
     | dummy_feature_list feature
     { $$ = append_Features($1, single_Features($2));}
     ;
 
     feature
-    : OBJECTID '(' ')' ':' TYPEID '{' expre '}'
+    : OBJECTID '(' ')' ':' TYPEID '{' expre '}' ';'
     { $$ = method($1, nil_Formals(), $5, $7);}
-    | OBJECTID '(' formal_list ')' ':' TYPEID '{' expre '}'
+    | OBJECTID '(' formal_list ')' ':' TYPEID '{' expre '}' ';'
     { $$ = method($1, $3, $6, $8);}
-    | OBJECTID ':' TYPEID
+    | OBJECTID ':' TYPEID ';'
     { $$ = attr($1, $3, no_expr());}
-    | OBJECTID ':' TYPEID ASSIGN expre
+    | OBJECTID ':' TYPEID ASSIGN expre ';'
     { $$ = attr($1, $3, $5);}
     ;
     
-    formal
-    : OBJECTID ':' TYPEID
-    { $$ = formal($1, $3);}
-    ;
-
-    formal_list
-    : formal /* single formal */
-    {$$ = single_Formals($1);}
-    | formal_list formal /* multi formals */
-    {$$ = append_Formals($1, single_Formals($2));}
-    ;
-
-    let_expre
-    : OBJECTID ':' TYPEID IN expre
-    { $$ = let($1, $3, no_expr(), $5);}
-    | OBJECTID ':' TYPEID ASSIGN expre IN expre
-    { $$ = let($1, $3, $5, $7);}
-    ;
-
-    case
-    : OBJECTID ':' TYPEID DARROW expre
-    { $$ = branch($1, $3, $5);}
-    ;
-
-    case_list
-    : case  /* single case */
-    { $$ = single_Cases($1);}
-    |case_list case /* multi cases */
-    { $$ = append_Cases($1, single_Cases($2));}
-    ;
-
-    expre_list
-    : expre /* single expression */
-    { $$ = single_Expressions($1);}
-    | expre_list expre /* multi expressions */
-    { $$ = append_Expressions($1, single_Expressions($2));}
-    ;
-
     expre 
     : OBJECTID ASSIGN expre
     { $$ = assign($1, $3);}
     /* static type dispatch */
     | expre '@' TYPEID '.' OBJECTID '(' ')'
     { $$ = static_dispatch($1, $3, $5, nil_Expressions());}
-    | expre '@' TYPEID '.' OBJECTID '(' expre_list ')'
+    | expre '@' TYPEID '.' OBJECTID '(' dispatch_expre ')'
     { $$ = static_dispatch($1, $3, $5, $7);}
     /* dispatch (commonly used form) */
     | expre '.' OBJECTID '(' ')'
     { $$ = dispatch($1, $3, nil_Expressions());}
-    | expre '.' OBJECTID '(' expre_list ')'
+    | expre '.' OBJECTID '(' dispatch_expre ')'
     { $$ = dispatch($1, $3, $5);}
     /* self type dispatch */
     | OBJECTID '(' ')'
     { $$ = dispatch(object(idtable.add_string("self")), $1, nil_Expressions());}
-    | OBJECTID '(' expre_list ')'
+    | OBJECTID '(' dispatch_expre ')'
     { $$ = dispatch(object(idtable.add_string("self")), $1, $3);}
     /* if-else */
     | IF expre THEN expre ELSE expre FI
@@ -263,7 +227,7 @@
     /* block */
     | '{' '}'
     { $$ = block(nil_Expressions());}
-    | '{' expre_list '}'
+    | '{' block_expre '}'
     { $$ = block($2);}
     /* let */
     | LET let_expre
@@ -319,6 +283,57 @@
     /* boolean */
     | BOOL_CONST
     { $$ = bool_const($1);}
+    ;
+
+    dispatch_expre
+    : expre ',' /* single expression */
+    { $$ = single_Expressions($1);}
+    | dispatch_expre expre ',' /* multi expressions */
+    { $$ = append_Expressions($1, single_Expressions($2));}
+    ;    
+
+    formal
+    : OBJECTID ':' TYPEID
+    { $$ = formal($1, $3);}
+    ;
+
+    formal_list
+    :	/* empty */
+    { $$ = nil_Formals();}
+    | formal /* single formal */
+    { $$ = single_Formals($1);}
+    | formal_list ',' formal /* multi formals */
+    { $$ = append_Formals($1, single_Formals($3));}
+    ;
+
+    block_expre
+    : expre ';' /* single expression */
+    { $$ = single_Expressions($1);}
+    | block_expre expre ';' /* multi expressions */
+    { $$ = append_Expressions($1, single_Expressions($2));}
+    ;    
+
+    let_expre
+    : OBJECTID ':' TYPEID IN expre
+    { $$ = let($1, $3, no_expr(), $5);}
+    | OBJECTID ':' TYPEID ASSIGN expre IN expre
+    { $$ = let($1, $3, $5, $7);}
+    | OBJECTID ':' TYPEID ',' let_expre 
+    { $$ = let($1, $3, no_expr(), $5); }
+    | OBJECTID ':' TYPEID ASSIGN expre ',' let_expre 
+    { $$ = let($1, $3, $5, $7); }
+    ;
+
+    case
+    : OBJECTID ':' TYPEID DARROW expre ';'
+    { $$ = branch($1, $3, $5);}
+    ;
+
+    case_list
+    : case  /* single case */
+    { $$ = single_Cases($1);}
+    |case_list case /* multi cases */
+    { $$ = append_Cases($1, single_Cases($2));}
     ;
     
     /* end of grammar */
