@@ -145,6 +145,7 @@
     %type <case_> case
     
     /* Precedence declarations go here. */
+    %right FLAG
     %right ASSIGN
     %left NOT
     %nonassoc LE '<' '='
@@ -183,16 +184,12 @@
     dummy_feature_list
     :	/* empty */
     { $$ = nil_Features();}
-    | feature
-    { $$ = single_Features($1);}
     | dummy_feature_list feature
     { $$ = append_Features($1, single_Features($2));}
     ;
 
     feature
-    : OBJECTID '(' ')' ':' TYPEID '{' expre '}' ';'
-    { $$ = method($1, nil_Formals(), $5, $7);}
-    | OBJECTID '(' formal_list ')' ':' TYPEID '{' expre '}' ';'
+    : OBJECTID '(' formal_list ')' ':' TYPEID '{' expre '}' ';'
     { $$ = method($1, $3, $6, $8);}
     | OBJECTID ':' TYPEID ';'
     { $$ = attr($1, $3, no_expr());}
@@ -314,9 +311,9 @@
     ;    
 
     let_expre
-    : OBJECTID ':' TYPEID IN expre
+    : OBJECTID ':' TYPEID IN expre %prec FLAG
     { $$ = let($1, $3, no_expr(), $5);}
-    | OBJECTID ':' TYPEID ASSIGN expre IN expre
+    | OBJECTID ':' TYPEID ASSIGN expre IN expre %prec FLAG
     { $$ = let($1, $3, $5, $7);}
     | OBJECTID ':' TYPEID ',' let_expre 
     { $$ = let($1, $3, no_expr(), $5); }
