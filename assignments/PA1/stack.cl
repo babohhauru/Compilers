@@ -69,7 +69,7 @@ class StackCommand inherits IO {
   	method: A2I <- (new A2I);
 	main: Stack <- (new Stack); 	
 	
-	exec (a: String): Int {
+	execute (a: String): Int {
 		{		
 			if (a = "e")
 			then {
@@ -106,12 +106,12 @@ class Main inherits IO {
 	nil: Stack;
 
 	main() : Int {
-		let stckCmd: StackCommand <- (new StackCommand), chr: String <- "" in {
-			while (not (chr = "x")) loop
+		let command: StackCommand <- (new StackCommand), char: String <- "" in {
+			while (not (char = "x")) loop
 				{
 					out_string(">");
-					chr <- in_string();
-					stckCmd.exec(chr);
+					char <- in_string();
+					command.execute(char);
 				}
 			pool;
 			0;
