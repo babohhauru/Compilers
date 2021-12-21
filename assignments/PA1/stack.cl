@@ -106,12 +106,12 @@ class Main inherits IO {
 	nil: Stack;
 
 	main() : Int {
-		let command: StackCommand <- (new StackCommand), char: String <- "" in {
-			while (not (char = "x")) loop
+		let command: StackCommand <- (new StackCommand), charac: String <- "" in {
+			while (not (charac = "x")) loop
 				{
 					out_string(">");
-					char <- in_string();
-					command.execute(char);
+					charac <- in_string();
+					command.execute(charac);
 				}
 			pool;
 			0;
