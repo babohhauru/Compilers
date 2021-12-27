@@ -1,16 +1,13 @@
 #ifndef SEMANT_H_
 #define SEMANT_H_
 
+
 #include <assert.h>
-#include <iostream>  
-#include <map>
-#include <vector>
-#include <set>
-#include <algorithm>
-#include "cool-tree.h"
-#include "stringtab.h"
-#include "symtab.h"
+#include <symtab.h>
 #include "list.h"
+#include <vector>
+#include <map> 
+#include "cool-tree.h"
 
 #define TRUE 1
 #define FALSE 0
@@ -27,8 +24,6 @@ class ClassTable {
 private:
   int semant_errors;
   void install_basic_classes();
-  void install_classes(Classes classes);
-  void install_methods();
   ostream& error_stream;
 
 public:
@@ -41,4 +36,3 @@ public:
 
 
 #endif
-

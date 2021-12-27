@@ -1,24 +1,15 @@
+/*Working on union of types for simplecase*/
 
-
-#include <stdlib.h>
-#include <stdio.h>
 #include <stdarg.h>
 #include "semant.h"
 #include "utilities.h"
-
+#include <map>
 
 extern int semant_debug;
 extern char *curr_filename;
 
-typedef std::map<Symbol, Class_> ClassTable;    // name-class table
-ClassTable classTable;
-
-typedef SymbolTable<Symbol, Symbol> ObjectEnvironment;  // name-Type table
-ObjectEnvironment objectEnv;
-
-typedef std::vector<method_class*> Methods;
-typedef std::map<Class_, Methods> MethodTable;
-MethodTable methodTable;
+typedef SymbolTable <Symbol, Symbol>* SymTab;
+typedef std::map<Symbol, Class_> MAP;
 
 //////////////////////////////////////////////////////////////////////
 //
@@ -29,7 +20,7 @@ MethodTable methodTable;
 // as fixed names used by the runtime system.
 //
 //////////////////////////////////////////////////////////////////////
-static Symbol 
+static Symbol
     arg,
     arg2,
     Bool,
@@ -55,7 +46,9 @@ static Symbol
     str_field,
     substr,
     type_name,
-    val;
+    val
+;
+
 //
 // Initializing the predefined symbols.
 //
@@ -91,21 +84,84 @@ static void initialize_constants(void)
     val         = idtable.add_string("_val");
 }
 
-
-
+std::map<Symbol, Class_> classMap;
+Class_ Object_class;
 ClassTable::ClassTable(Classes classes) : semant_errors(0) , error_stream(cerr) {
 
-    /* Fill this in */
-	install_basic_classes();
-	install classes(classes);
+    install_basic_classes();
+    int cMain = 0;  /* Check if main class exists */
+    for(int i = classes->first(); classes->more(i); i = classes->next(i))
+	{
+		if(classes->nth(i)->getName() == Main) cMain = 1;
+	}    
+	if(!cMain)	semant_error()<<"Class Main is not defined.\n";
 
+    /* Traverse all the classes filling in the table that maps class names to class declarations.*/
+    for(int i = classes->first(); classes->more(i); i = classes->next(i))
+    {
+        Symbol s = classes->nth(i)->getName();
+        Symbol p = classes->nth(i)->getParent();
+        if(s == Object)
+        {
+            semant_error(classes->nth(i))<<"Object can't be redefined\n";
+        }
+        else if(s == SELF_TYPE)
+        {
+            semant_error(classes->nth(i))<<"Class name can not be SELF TYPE.\n";
+        }
+        else if(classMap.find(s)->first==s)
+        {
+            semant_error(classes->nth(i))<<"Class "<<s<<" is redefined\n"; 
+        }
+        else if(p == Bool ||  p == Str || p == Int || p == SELF_TYPE)
+        {
+            semant_error(classes->nth(i))<<"Can't inherit from "<<p<<endl;
+        }
+        else
+            classMap[s] = classes->nth(i);
+    }
+
+    /* Checking the inherit graph if there's undefined class or inherit cycle */
+    int flag=0; //if there's undefined class
+    // Check undefined classes in the classMap
+    for(int i = classes->first(); classes->more(i); i = classes->next(i))
+    {
+        if(classMap.count(classes->nth(i)->getParent())==0)
+        {
+            semant_error(classes->nth(i))<<"Class "<<classes->nth(i)->getParent()<<" is not defined\n";
+            flag=0;
+        }
+    }
+    // Check inherit cycle
+    std::map<Symbol, Symbol> cycle;
+    for(int i = classes->first(); classes->more(i) && flag; i = classes->next(i))
+    {
+        if(classes->nth(i)->getParent() == Object)
+        {
+            cycle.clear();
+        }
+        else
+        {
+            Class_ x = classes->nth(i);
+            while(1)
+            {
+                Symbol s = x->getParent();
+                if( !classMap.empty() && (cycle.find(s)->first == s) && (x->getName() == cycle[cycle.find(s)->first])) 
+                {
+                    semant_error(x)<<"Error\n"; break;
+                }
+                if( x->getParent() == Object ) {break;}
+                cycle[x->getParent()] = x->getName();
+                x = classMap.find(x->getParent())->second;
+            }
+        } 
+    } 
 }
 
-/* 添加基本类 */
 void ClassTable::install_basic_classes() {
 
     // The tree package uses these globals to annotate the classes built below.
-   // curr_lineno  = 0;
+    // curr_lineno  = 0;
     Symbol filename = stringtable.add_string("<basic class>");
     
     // The following demonstrates how to create dummy parse trees to
@@ -126,7 +182,7 @@ void ClassTable::install_basic_classes() {
     // There is no need for method bodies in the basic classes---these
     // are already built in to the runtime system.
 
-    Class_ Object_class =
+    Object_class =
 	class_(Object, 
 	       No_class,
 	       append_Features(
@@ -201,613 +257,13 @@ void ClassTable::install_basic_classes() {
 						      Str, 
 						      no_expr()))),
 	       filename);
-	classTable[Object_class -> getName()] = Object_class;
-	classTable[IO_class -> getName()] = IO_class;
-	classTable[Int_class -> getName()] = Int_class;
-	classTable[Bool_class -> getName()] = Bool_class;
-	classTable[Str_class -> getName()] = Str_class;
-}
 
-/* 确定不存在类继承了int,string,boolean,self type, self_type没有被定义和class不能重新定义，*/
-void ClassTableC::install_classes(Classes classes) {
-	for(int i = classes->first(); classes->more(i); i = classes->next(i)) {
-		curr_class = classes->nth(i);
-		Symbol pname = curr_class->getParentName();
-        	if(curr_class->getName() ==  SELF_TYPE) {
-			semant_error(curr_class) << "Can't define SELF_TYPE.\n";
-		}
-        	else if (classTable.find(curr_class->getName()) != classTable.end()) {
-			semant_error(curr_class) << "Can't redefine " << curr_class->getName() << ".\n";
-		}
-        	else if (pname == Int || pname == Str || pname == Bool || pname == SELF_TYPE) {
-			semant_error(curr_class) << "Class " << curr_class->getName() << "can't inherit from " << pname << ".\n";
-		}
-		else {
-			classTable[curr_class->getName()] = curr_class;
-		}
-	}
-}
-
-static void install_methods() {
-	for (ClassTable::iterator it = classTable.begin(); it != classTable.end(); it++) {
-		Features features = it->second->getFeatures();
-		Methods methods;
-		for(int i = features->first(); features->more(i); i = features->next(i)) {
-			if(features->nth(i)->isMethod()) {
-				method_class* method = static_cast<method_class*>(features->nth(i));
-				bool existed = false;
-				for(size_t j = 0; j < methods.size(); j++) {
-					if(methods[j]->getName() == method->getName()) {
-                        existed = true;
-					}
-                }
-				if(existed) {
-                    semant_error(method) << "Method " << method->getName() << " is multiply defined.\n";
-				}
-                else {
-                    methods.push_back(static_cast<method_class*>(features->nth(i)));
-				}
-			}
-		}
-        methodTable[it->second] = methods;
-	}
-}
-
-// class Inheritance chain
-static std::vector<Class_> getInheritanceChain(Class_ c) {
-	std::vector<Class_> chain;
-	while (c->getName() != Object) {
-		chain.push_back(c);
-		if (classTable.find(c->getParentName()) == classTable.end()) {
-			internal_error(__LINE__) << "invalid inheritance chain.\n";
-		}
-		else { 
-			c = classTable[c->getParentName()];
-		}
-	}
-	chain.push_back(classTable[Object]);
-	return chain;
-}
-
-static std::vector<Class_> getInheritanceChain(Symbol name) {
-	if (name == SELF_TYPE) {
-		name = curr_class->getName();
-	}
-	if (classTable.find(name) == classTable.end()) {
-		internal_error(__LINE__) << name << " not found in class table.\n";
-	}
-	return getInheritanceChain(classTable[name]);
-}
-
-static bool conform(Symbol name1, Symbol name2) {
-	if (name1 == SELF_TYPE && name2 == SELF_TYPE) {
-		return true;
-	}
-	if (name1 != SELF_TYPE && name2 == SELF_TYPE) {
-		return false;
-	}
-	if (name1 == SELF_TYPE) {
-		name1 = curr_class->getName();
-	}
-	if (classTable.find(name1) == classTable.end()) {
-		internal_error(__LINE__) << name1 << " not found in class table.\n";
-	}
-	if (classTable.find(name2) == classTable.end()) {
-		internal_error(__LINE__) << name2 << " not found in class table.\n";
-	}
-	Class_ c1 = classTable[name1];
-	Class_ c2 = classTable[name2];
-	std::vector<Class_> chain = getInheritanceChain(c1);
-	for (size_t i = 0; i < chain.size(); i++) {
-		if (chain[i] == c2) {
-			return true;
-		}
-	}
-	return false;
-}
-
-static Class_ LCA(Symbol name1, Symbol name2) {
-	std::vector<Class_> chain1 = getInheritanceChain(name1);
-	std::vector<Class_> chain2 = getInheritanceChain(name2);
-	std::reverse(chain1.begin(), chain1.end());
-	std::reverse(chain2.begin(), chain2.end());
-	size_t i;
-	for (i = 1; i < std::min(chain1.size(), chain2.size()); i++) {
-		if (chain1[i] != chain2[i]) {
-			return chain1[i - 1];
-		}
-	}
-	return chain1[i - 1];
-}
-
-static method_class* getMethod(Class_ c, Symbol method_name) {
-	Methods methods = methodTable[c];
-	for (size_t i = 0; i < methods.size(); i++) {
-		if (methods[i]->getName() == method_name) {
-			return methods[i];
-		}
-	}
-	return 0;
-}
-
-static void check_inheritance() {
-	for (ClassTable::iterator it = classTable.begin(); it != classTable.end(); it++) {
-		if (it->first != Object && classTable.find(it->second->getParentName()) == classTable.end()) {
-			curr_class = it->second;
-			semant_error(curr_class) << "Class " << it->second->getName() << "inherits from an undefined class " << it->second->getParentName() << ".\n";
-		}
-	}
-	for (ClassTable::iterator it = classTable.begin(); it != classTable.end(); it++) {
-		if (it->first == Object) continue;
-		curr_class = it->second;
-		Symbol cname = it->first;
-		Symbol pname = it->second->getParentName();
-		while (pname != Object) {
-			if (pname == cname) {
-				semant_error(curr_class) << "Class " << curr_class->getName() << ", or an ancestor of " << curr_class->getName() << ", is involved in an inheritance cycle.\n";
-				break;
-			}
-			if (classTable.find(pname) == classTable.end()) {
-				break;
-			}
-			pname = classTable[pname]->getParentName();
-		}
-	}
-}
-
-static void check_main() {
-	if (classTable.find(Main) == classTable.end()) {
-		semant_error() << "Class Main is not defined.\n";
-		return ;
-	}
-	curr_class = classTable[Main];
-	Features features = curr_class->getFeatures();
-	bool find_main = false;
-	for (int i = features->first(); features->more(i); i = features->next(i)) {
-		if (features->nth(i)->isMethod() && static_cast<method_class*>(features->nth(i))->getName() == main_meth) {
-			find_main = true;
-		}
-	}
-	if (!find_main) {
-		semant_error(curr_class) << "No 'main' method in class Main. \n";
-	}
-}
-
-static void check_methods() {
-    for (ClassTable::iterator it = classTable.begin(); it != classTable.end(); it++) {
-    	if (it->first == Object || it->first == IO || it->first == Int || it->first == Bool || it->first == Str) {
-        	continue;
-        }
-        Symbol class_name = it->first;
-        curr_class = it->second;
-        std::vector<Class_> chain = getInheritanceChain(curr_class);
-        chain.push_back(curr_class);
-        for (size_t k = 1; k < chain.size(); k++) {
-            Class_ ancestor_class = chain[k];
-            Features ancestor_features = ancestor_class->getFeatures();
-            objectEnv.enterscope();
-            for (int i = ancestor_features->first(); ancestor_features->more(i); i = ancestor_features->next(i)) {
-                if (!ancestor_features->nth(i)->isAttr()) {
-                    continue;
-                }
-                attr_class* attr = static_cast<attr_class*>(ancestor_features->nth(i));
-                objectEnv.addid(attr->getName(), new Symbol(attr->getType()));
-            }
-        }
-
-    	Features features = curr_class->getFeatures();
-		for (int i = features->first(); features->more(i); i = features->next(i)) {
-			if (features->nth(i)->isMethod()) {
-				method_class* curr_method = static_cast<method_class*>(features->nth(i));
-				curr_method->checkType();
-				for (size_t k = 1; k < chain.size(); k++) {
-					method_class* ancestor_method = getMethod(chain[k], curr_method->getName());
-					if (!ancestor_method) {
-						continue;
-					}
-					if (curr_method->getReturnType() != ancestor_method->getReturnType()) {
-						semant_error(curr_method) << "In redefined method " << curr_method->getName() << ", return type " << " is different from original return type " << ancestor_method->getReturnType() << ".\n";
-					}
-					Formals curr_formals = curr_method->getFormals();
-					Formals ancestor_formals = ancestor_method->getFormals();
-					int k1 = curr_formals->first(), k2 = ancestor_formals->first();
-					while (curr_formals->more(k1) && ancestor_formals->more(k2)) {
-						if (curr_formals->nth(k1)->getType() != ancestor_formals->nth(k2)->getType()) {
-							semant_error(curr_formals->nth(k1)) << "In redefined method " << curr_method->getName() << ", parameter type " << curr_formals->nth(k1)->getType() << " is different from original type " << ancestor_formals->nth(k2)->getType() << ".\n";
-						}
-						k1 = curr_formals->next(k1);
-						k2 = ancestor_formals->next(k2);
-						if (curr_formals->more(k1) xor ancestor_formals->more(k2)) {
-							semant_error(curr_method) << "Incompatible number of formal parameters in redefined method " << curr_method->getName() << ".\n";
-						}
-					}
-				}
-			}
-			else {
-				attr_class* curr_attr = static_cast<attr_class*>(features->nth(i));
-				Symbol expr_type = curr_attr->getInitExpr()->checkType();
-				if (classTable.find(curr_attr->getType()) == classTable.end()) {
-					semant_error(curr_attr) << "Class " << curr_attr->getType() << " of attribute " << curr_attr->getName() << " is undefined.\n";
-				}
-				else if (classTable.find(expr_type) != classTable.end() && !conform(expr_type, curr_attr->getType())) {
-					semant_error(curr_attr) << "inferred type " << expr_type << " of initialization of attribute " << curr_attr->getName() << " does not conform to declared type " << curr_attr->getType() << ".\n";
-				}
-			}
-		}
-		for (size_t k = 1; k < chain.size(); k++) {
-			objectEnv.exitscope();
-		}
-    }
-}
-
-// check types
-void method_class::checkType() {
-    objectEnv.enterscope();
-    for (int i = formals->first(); formals->more(i); i = formals->next(i)) {
-        if (formals->nth(i)->getName() == self) {
-            semant_error(formals->nth(i)) << "'self' cannot be the name of a formal parameter.\n";
-        }
-        else if (objectEnv.lookup(formals->nth(i)->getName())) {
-            semant_error(formals->nth(i)) << "Formal parameter " << formals->nth(i)->getName() << " is multiply defined.\n";
-        }
-        else if (classTable.find(formals->nth(i)->getType()) == classTable.end()) {
-            semant_error(formals->nth(i)) << "Class " << formals->nth(i)->getType() << " of formal parameter " << formals->nth(i)->getName() << " is undefined.\n";
-        }
-        else {
-            objectEnv.addid(formals->nth(i)->getName(), new Symbol(formals->nth(i)->getType()));
-        }
-    }
-    Symbol expr_type = expr->checkType();
-	if (return_type != SELF_TYPE && classTable.find(return_type) == classTable.end()) {
-		semant_error(this) << "Undefined return type " << return_type << " in method " << name << ".\n";
-	}
-	else if (!conform(expr_type, return_type)) {
-		semant_error(this) << "Inferred return type " << expr_type << " of method " << name << " does not conform to declared return type " << return_type << ".\n";
-	}
-	objectEnv.exitscope();
-}
-
-Symbol assign_class::checkType() {
-    Symbol rtype = expr->checkType();
-    if (objectEnv.lookup(name) == 0) {
-        semant_error(this) << "Assignment to undeclared variable " << name << ".\n";
-        type = rtype;
-        return type;
-    }
-    Symbol ltype = *objectEnv.lookup(name);
-    if (!conform(rtype, ltype)) {
-        semant_error(this) << "Type " << rtype << " of assigned expression does not conform to declared type " << ltype << " of identifier " << name << ".\n";
-    	type = ltype;
-    	return type;
-    }
-    	type = rtype;
-    	return type;
-}
-
-Symbol static_dispatch_class::checkType() {
-    bool error = false;
-    Symbol expr_type = expr->checkType();
-    if (this->type_name != SELF_TYPE && classTable.find(this->type_name) == classTable.end()) {
-        semant_error(this) << "Static dispatch to undefined class " << this->type_name << ".\n";
-        type = Object;
-        return type;
-    }
-
-    if (expr_type != SELF_TYPE && classTable.find(expr_type) == classTable.end()) {
-    	type = Object;
-    	return type;
-    }
-
-	if (!conform(expr_type, this->type_name)) {
-		error = true;
-		semant_error(this) << "Expression type " << expr_type << " does not conform to declared static dispatch type " << this->type_name << ".\n";
-	}
-
-	method_class* method = 0;
-	std::vector<Class_> chain = getInheritanceChain(this->type_name);
-	for (size_t i = 0; i < chain.size(); i++) {
-		Methods methods = methodTable[chain[i]];
-		for (size_t i = 0; i < methods.size(); i++) {
-			if (methods[i]->getName() == name) {
-				method = methods[i];
-				break;
-			}
-		}
-	}
-
-	if (method == 0) {
-		error = true;
-		semant_error(this) << "Static dispatch to undefined method " << name << ".\n";
-	} else {
-		Formals formals = method->getFormals();
-		int k1 = actual->first(), k2 = formals->first();
-		while (actual->more(k1) && formals->more(k2)) {
-				Symbol actual_type = actual->nth(k1)->checkType();
-				Symbol formal_type = formals->nth(k2)->getType();
-				if (!conform(actual_type, formal_type)) {
-					error = true;
-					semant_error(this) << "In call of method " << name << ", type " << actual_type << " of parameter " << formals->nth(k2)->getName() << " does not conform to declared type " << formal_type << ".\n";
-				}
-			k1 = actual->next(k1);
-			k2 = formals->next(k2);
-				if (actual->more(k1) xor formals->more(k2)) {
-					error = true;
-					semant_error(this) << "Method " << name << " called with wrong number of arguments.\n";
-				}
-		}
-	}
-
-	if (error) {
-		type = Object;
-	} else {
-		type = method->getReturnType();
-		if (type == SELF_TYPE) {
-			type = this->type_name;
-		}
-	}
-	return type;
-}
-
-Symbol dispatch_class::checkType() {
-	bool error = false;
-	Symbol expr_type = expr->checkType();
-	if (expr_type != SELF_TYPE && classTable.find(expr_type) == classTable.end()) {
-		semant_error(this) << "Dispatch on undefined class " << expr_type << ".\n";
-		type = Object;
-		return type;
-	}
-	method_class* method = 0;
-	std::vector<Class_> chain = getInheritanceChain(expr_type);
-	for (size_t i = 0; i < chain.size(); i++) {
-		Methods methods = methodTable[chain[i]];
-		for (size_t i = 0; i < methods.size(); i++) {
-			if (methods[i]->getName() == name) {
-				method = methods[i];
-				break;
-			}
-		}
-	}
-	if (method == 0) {
-		error = true;
-		semant_error(this) << "Dispatch to undefined method " << name << ".\n";
-	} else {
-		Formals formals = method->getFormals();
-		int k1 = actual->first(), k2 = formals->first();
-		while (actual->more(k1) && formals->more(k2)) {
-			Symbol actual_type = actual->nth(k1)->checkType();
-			Symbol formal_type = formals->nth(k2)->getType();
-			if (!conform(actual_type, formal_type)) {
-				error = true;
-				semant_error(this) << "In call of method " << name << ", type " << actual_type << " of parameter " << formals->nth(k2)->getName() << " does not conform to declared type " << formal_type << ".\n";
-			}
-			k1 = actual->next(k1);
-			k2 = formals->next(k2);
-			if (actual->more(k1) xor formals->more(k2)) {
-				error = true;
-				semant_error(this) << "Method " << name << " called with wrong number of arguments.\n";
-			}
-	}
-}
-	if (error) {
-		type = Object;
-	} else {
-		type = method->getReturnType();
-		if (type == SELF_TYPE) {
-			type = expr_type;
-		}
-	}
-	return type;
-}
-
-Symbol cond_class::checkType() {
-	if (pred->checkType() != Bool) {
-		semant_error(this) << "Predicate of 'if' does not have type Bool.\n";
-	}
-	Symbol then_type = then_exp->checkType();
-	Symbol else_type = else_exp->checkType();
-	if (then_type == SELF_TYPE && else_type == SELF_TYPE) {
-		type = SELF_TYPE;
-	}
-	else {
-		type = LCA(then_type, else_type)->getName();
-	}
-	return type;
-}
-
-Symbol loop_class::checkType() {
-	if (pred->checkType() != Bool) {
-		semant_error(this) << "Loop condition does not have type Bool.\n";
-	}
-	body->checkType();
-	type = Object;
-	return type;
-}
-
-Symbol typcase_class::checkType() {
-	Symbol expr_type = expr->checkType();
-	std::set<Symbol> branch_type_decls;
-
-	for (int i = cases->first(); cases->more(i); i = cases->next(i)) {
-		branch_class* branch = static_cast<branch_class*>(cases->nth(i));
-		if (branch_type_decls.find(branch->get_type_decl()) != branch_type_decls.end()) {
-			semant_error(branch) << "Duplicate branch " << branch->get_type_decl() << " in case statement.\n";
-		}
-		else {
-			branch_type_decls.insert(branch->get_type_decl());
-		}
-		Symbol branch_type = branch->checkType();
-		if (i == cases->first()) {
-			type = branch_type;
-		}
-		else if (type != SELF_TYPE || branch_type != SELF_TYPE) {
-			type = LCA(type, branch_type)->getName();
-		}
-	}
-	return type;
-}
-
-Symbol branch_class::checkType() {
-	objectEnv.enterscope();
-	objectEnv.addid(name, new Symbol(type_decl));
-	type = expr->checkType();
-	objectEnv.exitscope();
-	return type;
-}
-
-Symbol block_class::checkType() {
-	for (int i = body->first(); body->more(i); i = body->next(i)) {
-		type = body->nth(i)->checkType();
-	}
-	return type;
-}
-
-Symbol let_class::checkType() {
-	objectEnv.enterscope();
-	objectEnv.addid(identifier, new Symbol(type_decl));
-	Symbol init_type = init->checkType();
-	if (classTable.find(type_decl) == classTable.end()) {
-		semant_error(this) << "Class " << type_decl << " of let-bound identifier " << identifier << " is undefined.\n";
-	}
-	else if (init_type != No_type && !conform(init_type, type_decl)) {
-		semant_error(this) << "Inferred type " << init_type << " of initialization of " << identifier << " does not conform to identifier's declared type " << type_decl << ".\n";
-	}
-	type = body->checkType();
-	objectEnv.exitscope();
-	return type;
-}
-
-Symbol plus_class::checkType() {
-	Symbol type1 = e1->checkType();
-	Symbol type2 = e2->checkType();
-	if (type1 != Int || type2 != Int) {
-		semant_error(this) << "non-Int arguments: " << type1 << " + " << type2 << endl;
-	}
-	type = Int;
-	return type;
-}
-
-Symbol sub_class::checkType() {
-	Symbol type1 = e1->checkType();
-	Symbol type2 = e2->checkType();
-	if (type1 != Int || type2 != Int) {
-		semant_error(this) << "non-Int arguments: " << type1 << " - " << type2 << endl;
-	}
-	type = Int;
-	return type;
-}
-
-Symbol mul_class::checkType() {
-	Symbol type1 = e1->checkType();
-	Symbol type2 = e2->checkType();
-	if (type1 != Int || type2 != Int) {
-		semant_error(this) << "non-Int arguments: " << type1 << " * " << type2 << endl;
-	}
-	type = Int;
-	return type;
-}
-
-Symbol divide_class::checkType() {
-	Symbol type1 = e1->checkType();
-	Symbol type2 = e2->checkType();
-	if (type1 != Int || type2 != Int) {
-		semant_error(this) << "non-Int arguments: " << type1 << " / " << type2 << endl;
-	}
-	type = Int;
-	return type;
-}
-
-Symbol neg_class::checkType() {
-	type = e1->checkType();
-	if (type != Int) {
-		semant_error(this) << "Argument of '~' has type " << type << " instead of Int.\n";
-	}
-	type = Int;
-	return type;
-}
-
-Symbol lt_class::checkType() {
-	Symbol type1 = e1->checkType();
-	Symbol type2 = e2->checkType();
-	if (type1 != Int || type2 != Int) {
-		semant_error(this) << "non-Int arguments: " << type1 << " < " << type2 << endl;
-	}
-	type = Bool;
-	return type;
-}
-
-Symbol eq_class::checkType() {
-	Symbol t1 = e1->checkType(), t2 = e2->checkType();
-	if ((t1 == Int || t1 == Bool || t1 == Str || t2 == Int || t2 == Bool || t2 == Str) && t1 != t2) {
-		semant_error(this) << "Illegal comparison with a basic type.\n";
-	}
-	type = Bool;
-	return type;
-}
-
-Symbol leq_class::checkType() {
-	Symbol type1 = e1->checkType();
-	Symbol type2 = e2->checkType();
-	if (type1 != Int || type2 != Int) {
-		semant_error(this) << "non-Int arguments: " << type1 << " <= " << type2 << endl;
-	}
-	type = Bool;
-	return type;
-}
-
-Symbol comp_class::checkType() {
-	type = e1->checkType();
-	if (type != Bool) {
-		semant_error(this) << "Argument of 'not' has type " << type << " instead of Bool.\n";
-	}
-	type = Bool;
-	return type;
-}
-
-Symbol int_const_class::checkType() {
-	type = Int;
-	return type;
-}
-
-Symbol bool_const_class::checkType() {
-	type = Bool;
-	return type;
-}
-
-Symbol string_const_class::checkType() {
-	type = Str;
-	return type;
-}
-
-Symbol new__class::checkType() {
-	if (this->type_name != SELF_TYPE && classTable.find(this->type_name) == classTable.end()) {
-		semant_error(this) << "'new' used with undefined class " << this->type_name << ".\n";
-		this->type_name = Object;
-	}
-	type = this->type_name;
-	return type;
-}
-
-Symbol isvoid_class::checkType() {
-	e1->checkType();
-	type = Bool;
-	return type;
-}
-
-Symbol no_expr_class::checkType() {
-	type = No_type;
-	return type;
-}
-
-Symbol object_class::checkType() {
-	if (name == self) {
-		type = SELF_TYPE;
-    } else if (objectEnv.lookup(name)) {
-		type = *objectEnv.lookup(name);
-    } else {
-		semant_error(this) << "Undeclared identifier " << name << ".\n";
-		type = Object;
-    }
-	return type;
+    //initial the classMap with defined Class
+    classMap[Object] = Object_class;
+    classMap[IO]     = IO_class;
+    classMap[Int]    = Int_class;
+    classMap[Bool]   = Bool_class;
+    classMap[Str]    = Str_class;
 }
 
 ////////////////////////////////////////////////////////////////////
@@ -840,9 +296,438 @@ ostream& ClassTable::semant_error()
 {                                                 
     semant_errors++;                            
     return error_stream;
-} 
+}
 
 
+SymbolTable <Symbol, Symbol> *attrTable;
+SymbolTable <Symbol, Symbol> *methodTable;
+
+void attr_class::store()
+{
+    attrTable->addid(this->getName(), new Symbol(this->getReturnType()));
+    return;
+}
+
+void method_class::store()
+{
+    methodTable->addid(this->getName(), new Symbol(this->getReturnType()));
+    return;
+}
+
+ClassTable *classtable;
+bool lub(Symbol sym1, Symbol sym2);
+
+//type checking
+Symbol method_class::typeChecker(SymTab attrTable, MAP classMap, Class_ curClasss) 
+{
+	Symbol type;
+	if(return_type == SELF_TYPE)
+	{
+		type = curClasss->getName();
+	}
+	else type = return_type;
+	Symbol return_expr = expr->typeChecker(attrTable, classMap, curClasss);
+	return type;
+}
+
+Symbol int_const_class::typeChecker(SymTab attrTable, MAP classMap, Class_ curClasss) 
+{
+    type = Int;
+    return type;
+}
+
+Symbol object_class::typeChecker(SymTab attrTable, MAP classMap, Class_ curClasss) 
+{
+	if(this->name == self) {type = SELF_TYPE; }
+	else
+	{
+		type = *(attrTable->lookup(name));
+		if(type == NULL) type = Object;
+	}
+    return type;
+}
+
+Symbol no_expr_class::typeChecker(SymTab attrTable, MAP classMap, Class_ curClasss) 
+{
+    type = No_type;
+    return type;
+}
+
+Symbol isvoid_class::typeChecker(SymTab attrTable, MAP classMap, Class_ curClasss) 
+{
+    e1->typeChecker(attrTable, classMap, curClasss) ;
+    type = Bool;
+    return type;
+}
+
+Symbol new__class::typeChecker(SymTab attrTable, MAP classMap, Class_ curClasss) 
+{
+    if(type_name == SELF_TYPE) {type = SELF_TYPE; return type;}
+    Symbol s = type_name;
+    Symbol *a;
+    Symbol q = classMap.find(s)->first;
+    if(q != NULL) {
+    	type = q;
+    }
+    else {
+		type = Object;
+	}
+    return type;
+}
+
+Symbol string_const_class::typeChecker(SymTab attrTable, MAP classMap, Class_ curClasss) 
+{
+    type = Str;
+    return type;
+}
+
+Symbol bool_const_class::typeChecker(SymTab attrTable, MAP classMap, Class_ curClasss) 
+{
+    type = Bool;
+    return type;
+}
+
+Symbol comp_class::typeChecker(SymTab attrTable, MAP classMap, Class_ curClasss) 
+{
+    type = e1->typeChecker(attrTable, classMap, curClasss) ;
+    return type;
+}
+
+Symbol leq_class::typeChecker(SymTab attrTable, MAP classMap, Class_ curClasss) 
+{
+    Symbol type1 = e1->typeChecker(attrTable, classMap, curClasss) ;
+    Symbol type2 = e2->typeChecker(attrTable, classMap, curClasss) ;
+    if(type1 != Int || type2 != Int) 
+    {
+        classtable->semant_error(curClasss)<<"Both leq expresssions are not Int type.\n";
+    }
+    else type = Bool;
+    return type;
+}
+
+Symbol eq_class::typeChecker(SymTab attrTable, MAP classMap, Class_ curClasss) 
+{
+    Symbol type1 = e1->typeChecker(attrTable, classMap, curClasss) ;
+    Symbol type2 = e2->typeChecker(attrTable, classMap, curClasss) ;
+	if((type1 == Int || type1 == Str || type1 == Bool) && type1 != type2)
+	{
+		classtable->semant_error(curClasss)<<"Both eq expressions are not Int type.\n";
+	}
+    else type = Bool;
+    return type;
+}
+
+Symbol lt_class::typeChecker(SymTab attrTable, MAP classMap, Class_ curClasss) 
+{
+    Symbol type1 = e1->typeChecker(attrTable, classMap, curClasss) ;
+    Symbol type2 = e2->typeChecker(attrTable, classMap, curClasss) ;
+    if(type1 != Int || type2 != Int) 
+    {
+        classtable->semant_error(curClasss)<<"Both lt expressions are not Int type.\n";
+    }
+    else type = Bool;
+    return type;
+}
+
+Symbol neg_class::typeChecker(SymTab attrTable, MAP classMap, Class_ curClasss) 
+{
+    Symbol type1 = e1->typeChecker(attrTable, classMap, curClasss);
+    if(type1 != Int)
+    {
+        classtable->semant_error(curClasss)<<"Both neg expressions are not Int type.\n";
+    }
+    type = Int;
+    return type;
+}
+
+Symbol divide_class::typeChecker(SymTab attrTable, MAP classMap, Class_ curClasss) 
+{
+    Symbol type1 = e1->typeChecker(attrTable, classMap, curClasss) ;
+    Symbol type2 = e2->typeChecker(attrTable, classMap, curClasss) ;
+    if(type1 != Int || type2 != Int) 
+    {
+        classtable->semant_error(curClasss)<<"Both divide expressions are not Int type.\n";
+    }
+    else type = Int;
+    return type;
+}
+
+Symbol mul_class::typeChecker(SymTab attrTable, MAP classMap, Class_ curClasss) 
+{
+    Symbol type1 = e1->typeChecker(attrTable, classMap, curClasss) ;
+    Symbol type2 = e2->typeChecker(attrTable, classMap, curClasss) ;
+    if(type1 != Int || type2 != Int) 
+    {
+        classtable->semant_error(curClasss)<<"Both mul expressions are not Int type.\n";
+    }
+    else type = Int;
+    return type;
+}
+
+Symbol sub_class::typeChecker(SymTab attrTable, MAP classMap, Class_ curClasss) 
+{
+    Symbol type1 = e1->typeChecker(attrTable, classMap, curClasss) ;
+    Symbol type2 = e2->typeChecker(attrTable, classMap, curClasss) ;
+    if(type1 != Int || type2 != Int) 
+    {
+        classtable->semant_error(curClasss)<<"Both sub expressions are not Int type.\n";
+    }
+    else type = Int;
+    return type;
+}
+
+Symbol plus_class::typeChecker(SymTab attrTable, MAP classMap, Class_ curClasss) 
+{
+    Symbol type1 = e1->typeChecker(attrTable, classMap, curClasss) ;
+    Symbol type2 = e2->typeChecker(attrTable, classMap, curClasss) ;
+    if(type1 != Int || type2 != Int) 
+    {
+        classtable->semant_error(curClasss)<<"Both plus expressions are not Int type.\n";
+    }
+    else type = Int;
+    return type;
+}
+
+Symbol let_class::typeChecker(SymTab attrTable, MAP classMap, Class_ curClasss) 
+{
+	if(identifier == self)
+	{
+		classtable->semant_error(curClasss)<<"No self binding in LET allowed.\n";
+	}
+	else 
+	{
+		Symbol type1;
+		if(this->init)
+		{
+			if(type_decl == SELF_TYPE)
+				type1 = curClasss->getName();
+			else type1 = type_decl;
+			Symbol typeExpr = init->typeChecker(attrTable, classMap, curClasss);
+			if(!lub(type1, typeExpr))
+			{
+				classtable->semant_error(curClasss)<<"Wrong let expression.";
+			}
+			attrTable->enterscope();
+			attrTable->addid(identifier, new Symbol(type_decl));
+		}
+		else 
+		{
+			if(type_decl == SELF_TYPE)
+				type1 = curClasss->getName();
+			else type1 = type_decl;
+			attrTable->enterscope();
+			attrTable->addid(identifier, new Symbol(type_decl));
+
+		}
+		type = body->typeChecker(attrTable, classMap, curClasss);
+	}
+	return type;	
+}
+
+Symbol block_class::typeChecker(SymTab attrTable, MAP classMap, Class_ curClasss) 
+{
+    for(int i = body->first(); body->more(i); i = body->next(i))
+    type = body->nth(i)->typeChecker(attrTable, classMap, curClasss) ;
+    return type;
+}
+
+Symbol typcase_class::typeChecker(SymTab attrTable, MAP classMap, Class_ curClasss) 
+{
+    expr->typeChecker(attrTable, classMap, curClasss);
+    for(int i = cases->first(); cases->more(i); i = cases->next(i))
+    {
+    	Case c = cases->nth(i);
+    	c->typeChecker(attrTable, classMap, curClasss);
+    }
+    return Int;
+}
+
+Symbol branch_class::typeChecker(SymTab attrTable, MAP classMap, Class_ curClasss) 
+{
+	attrTable->enterscope();
+    attrTable->addid(this->name, new Symbol(type_decl));
+    Symbol t = this->expr->typeChecker(attrTable, classMap, curClasss);
+    attrTable->exitscope();
+    return t;
+}
+
+Symbol loop_class::typeChecker(SymTab attrTable, MAP classMap, Class_ curClasss) 
+{
+    type = Int;
+    return type;
+}
+
+Symbol cond_class::typeChecker(SymTab attrTable, MAP classMap, Class_ curClasss) 
+{
+    type = Int;
+    return type;
+}
+
+Symbol dispatch_class::typeChecker(SymTab attrTable, MAP classMap, Class_ curClasss) 
+{
+    if(name == ::copy || name == out_int || name == out_string)
+	{
+		type = expr->typeChecker(attrTable, classMap, curClasss);
+		for(int i = actual->first(); actual->more(i); i = actual->next(i))
+	    {
+	    	actual->nth(i)->typeChecker(attrTable, classMap, curClasss); 
+	    }
+		return type;
+	}
+
+    Symbol type1;
+    type1 = expr->typeChecker(attrTable, classMap, curClasss); 
+    if(type1 == SELF_TYPE) type1 = curClasss->getName();
+    int i;
+    for(i = actual->first(); actual->more(i); i = actual->next(i))
+    {
+    	actual->nth(i)->typeChecker(attrTable, classMap, curClasss); 
+    }
+    Symbol *type_name = methodTable->lookup(this->name);
+    if(*type_name == SELF_TYPE) *type_name = type1;
+    type = *type_name;
+    return type;
+}
+
+Symbol static_dispatch_class::typeChecker(SymTab attrTable, MAP classMap, Class_ curClasss) 
+{
+	Symbol type0 = expr->typeChecker(attrTable, classMap, curClasss); 
+	if(!lub(type_name, type0)) 
+	{
+		classtable->semant_error(curClasss)<<"Not a valid type in static dispacth.\n";
+	}
+    
+
+    Symbol type1;
+    type1 = expr->typeChecker(attrTable, classMap, curClasss); 
+    if(type1 == SELF_TYPE) type1 = curClasss->getName();
+    int i;
+    for(i = actual->first(); actual->more(i); i = actual->next(i))
+    {
+    	actual->nth(i)->typeChecker(attrTable, classMap, curClasss); 
+    }
+    Symbol *type_name = methodTable->lookup(this->name);
+    if(*type_name == SELF_TYPE) *type_name = type1;
+    type = *type_name;
+    return type;
+    return type;
+}
+
+Symbol assign_class::typeChecker(SymTab attrTable, MAP classMap, Class_ curClasss) 
+{
+    Symbol *varType;
+    varType = new Symbol();
+    varType = attrTable->lookup(name);
+    Symbol exprType = expr->typeChecker(attrTable, classMap, curClasss);
+	if(name == self) classtable->semant_error(curClasss)<<"Self type.\n";
+	else if(*varType == exprType) 
+	{
+		type = exprType;
+	}
+    else if(lub(*varType, exprType))
+    {
+        type = *varType;
+    }
+    else 
+    {
+    	classtable->semant_error(curClasss)<<"Error1.\n";
+    }
+    return type;
+}
+
+Symbol attr_class::typeChecker(SymTab attrTable, MAP classMap, Class_ curClasss)
+{
+	Symbol initType = init->typeChecker(attrTable, classMap, curClasss);
+	if(initType == SELF_TYPE) ;
+	else if(initType != No_type && lub(type_decl, initType)) {}
+	else if(!classMap.find(initType)->second) classtable->semant_error(curClasss)<<"Undefined.\n";
+	return type_decl;
+}
+
+void method_class::checkFormals(Formals formals, SymTab attrTable, Class_ curClasss)
+{
+    attrTable->enterscope();
+    for(int i = formals->first(); formals->more(i); i = formals->next(i))
+    {
+		if(attrTable->lookup(formals->nth(i)->getName()) && formals->nth(i)->getReturnType())
+		{
+			classtable->semant_error(curClasss)<<"Duplicate formal parameter.\n";
+		}
+		 if(formals->nth(i)->getName() == self)
+		{
+			classtable->semant_error(curClasss)<<"Formal parameter can't include self.\n";
+		}
+		else if(formals->nth(i)->getReturnType() == SELF_TYPE)
+		{         
+			classtable->semant_error(curClasss)<<"Formal parameter "<<formals->nth(i)->getName()<<" can't be SELF_TYPE.\n";		
+		}
+		attrTable->addid(formals->nth(i)->getName(), new Symbol(formals->nth(i)->getReturnType()));
+    }
+}
+
+void TypeCheck(Classes classes)
+{
+	methodTable->enterscope();
+	for(int i = classes->first(); classes->more(i); i = classes->next(i)) {
+        int flag=0;
+        attrTable->enterscope();
+        Class_ curClass = classes->nth(i);
+        while(curClass!=Object_class) {
+        	Features classFeatures = curClass->getFeatures();
+            for(int j = classFeatures->first(); classFeatures->more(j); j = classFeatures->next(j)) {
+                if(classFeatures->nth(j)->isMethod()) {
+                    Feature curMethod = classFeatures->nth(j);                    
+                    curMethod->store();
+                }
+                else if(!classFeatures->nth(j)->isMethod() && !attrTable->probe(classFeatures->nth(j)->getName())) {
+                	Feature curAttribute = classFeatures->nth(j);
+                    if(curAttribute->getName() == self) {
+                        classtable->semant_error(curClass)<<"Attribute can't be self\n";
+                        return;
+                    }
+                    else {
+                        curAttribute->store();
+                    }
+                }
+                else classtable->semant_error(curClass)<<"Error\n";
+            }
+            if(curClass->getParent()==Object) {
+            	flag=1;
+            	break;
+            }
+            curClass = (classMap.find(curClass->getParent()))->second;
+        }
+        
+    }
+    methodTable->addid(in_string, new Symbol(Str));
+    methodTable->addid(in_int, new Symbol(Int));
+    methodTable->addid(length, new Symbol(Int));
+    methodTable->addid(cool_abort, new Symbol(Object));
+    for(int i = classes->first(); classes->more(i); i = classes->next(i)) {
+    	Class_ curClass = classes->nth(i);
+    	Features classFeatures = curClass->getFeatures();
+    	for(int j = classFeatures->first(); classFeatures->more(j); j = classFeatures->next(j)) {
+    		Feature currFeature = classFeatures->nth(j);
+    		if(currFeature->isMethod()) {currFeature->checkFormals(currFeature->getFormals(), attrTable, curClass); }
+    		currFeature->typeChecker(attrTable,classMap,curClass);
+    		if(currFeature->isMethod()){attrTable->exitscope();}
+    	}
+    }
+    attrTable->exitscope();
+    methodTable->exitscope();
+}
+
+//sym1 is bigger type and sym2 is smaller or equal
+bool lub(Symbol sym1, Symbol sym2) {
+    if(sym1 == sym2) return true;
+    while(sym2 != Object) {
+	    if(sym1 == (classMap.find(sym2)->second)->getParent()) {
+	        return true;
+	    }
+	    sym2 = (classMap.find(sym2)->second)->getParent();
+	}
+    return false;
+}
 
 /*   This is the entry point to the semantic checker.
 
@@ -857,19 +742,22 @@ ostream& ClassTable::semant_error()
      errors. Part 2) can be done in a second stage, when you want
      to build mycoolc.
  */
+
 void program_class::semant()
 {
     initialize_constants();
-
-    /* ClassTable constructor may do some semantic analysis */
-    ClassTable *classtable = new ClassTable(classes);
-
-    /* some semantic analysis code may go here */
-
-    if (classtable->errors()) {
-	cerr << "Compilation halted due to static semantic errors." << endl;
-	exit(1);
+    classtable = new ClassTable(classes);
+    attrTable   = new SymbolTable<Symbol, Symbol>();
+    methodTable = new SymbolTable<Symbol, Symbol>();
+    if (classtable->errors())
+    {
+        cerr << "Compilation halted due to static semantic errors." << endl;
+        exit(1);
+    }
+    TypeCheck(classes);
+    if (classtable->errors())
+    {
+    	cerr << "Compilation halted due to static semantic errors." << endl;
+    	exit(1);
     }
 }
-
-
